@@ -168,6 +168,7 @@ def pack_imgs(images):
                 "name": _filename_init(img),
                 "mediaType": filetype.guess(_bytes).mime,
                 "content": base64.b64encode(_bytes).decode("utf-8"),
+                "type": "Image",
             }
         )
     return imgs
