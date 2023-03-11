@@ -47,12 +47,13 @@ class FeedData:
     @classmethod
     def reply(
         cls,
-        content: str,
-        images: list,
         reply_id: str,
+        content: str = None,
+        images: list = None,
         post_id: str = None,
         name: str = None,
     ):
+        """reply_id: the post_id to reply to"""
         content_obj = pack_obj(content, images, name, post_id)
         content_obj["inreplyto"] = {"type": "Note", "id": reply_id}
         return {"type": "Create", "object": content_obj}
