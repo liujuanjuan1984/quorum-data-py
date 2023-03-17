@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 # 将一张或多张图片处理成 RUM 支持的图片对象列表, 要求总大小小于 200kb，此为链端限定
-IMAGE_MAX_SIZE_KB = 200  # 200 kb 每条trx中所包含的图片总大小限制为 200
+IMAGE_MAX_SIZE_KB = 900  # 200 kb 每条trx中所包含的图片总大小限制为 200
 # 单条 trx 最多4 张图片；此为 rum app 客户端限定：第三方 app 调整该限定
 IMAGE_MAX_NUM = 4
-CHUNK_SIZE = 150 * 1024  # 150 kb，文件切割为多条trxs时，每条trx所包含的文件字节流上限
+CHUNK_SIZE = 900 * 1024  # 150 kb，文件切割为多条trxs时，每条trx所包含的文件字节流上限
 
 
 def _filename_init(img):

@@ -1,8 +1,8 @@
 import logging
 
-from quorum_data_py.feed import FeedData
+import quorum_data_py.feed as FeedData
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "liujuanjuan1984"
 
 # Set default logging handler to avoid "No handler found" warnings.
