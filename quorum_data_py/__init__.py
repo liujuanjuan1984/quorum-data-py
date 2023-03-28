@@ -2,7 +2,7 @@ import logging
 
 from quorum_data_py import converter, feed
 
-__version__ = "1.0.4"
+__version__ = "1.0.7"
 __author__ = "liujuanjuan1984"
 
 # Set default logging handler to avoid "No handler found" warnings.

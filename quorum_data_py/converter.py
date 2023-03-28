@@ -3,6 +3,7 @@
 
 把 解密后的 trx （通过 get content api 所获得的 trx）转换成新版的 trx data 和 timestamp 等，用来重新发布上链
 """
+from quorum_mininode_py.crypto.account import public_key_to_address
 
 
 def from_new_chain(trx: dict):
@@ -60,6 +61,15 @@ def from_old_chain(trx: dict):
 
     elif typeurl == "quorum.pb.Object":
         content = trx.get("Content", {})
+        imgs = trx.get("Content", {}).get("image")
+        if imgs:
+            _temp_imgs = []
+            for img in imgs:
+                if img.get("type") != "Image":
+                    img["type"] = "Image"
+                _temp_imgs.append(img)
+            content["image"] = _temp_imgs
+
         content_type = content.get("type")
         if content_type in ["Like", "Dislike"]:
             obj = {
