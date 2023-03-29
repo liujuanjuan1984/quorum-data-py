@@ -13,10 +13,10 @@ def from_new_chain(trx: dict):
     适用场景：把链 a 的 trx 发送到 链 b
     保留原有 trx_id 是为了继承此前所产生的交互数据
     """
-    if "Data" in trx and "Content" not in trx:
+    if isinstance(trx.get("Data"), str):
         raise ValueError("trx is encrypted.")
     new = {
-        "data": trx["Content"],
+        "data": trx.get("Content") or trx.get("Data"),
         "timestamp": trx["TimeStamp"],
         "trx_id": trx["TrxId"],
     }
@@ -29,11 +29,13 @@ def from_old_chain(trx: dict):
     然后通过轻节点的 post to group api 发送上链
     适用场景：把旧链的 trxs 发送到新链
     """
-    if "Data" in trx and "Content" not in trx:
+    if isinstance(trx.get("Data"), str):
         raise ValueError("trx is encrypted.")
 
     typeurl = trx.get("TypeUrl")
-    pubkey = trx.get("Publisher")
+    pubkey = trx.get("Publisher") or trx.get("SenderPubkey")
+
+    contentobj = trx.get("Content") or trx.get("Data") or {}
 
     obj = None
     if typeurl == "quorum.pb.Person":
@@ -45,11 +47,11 @@ def from_old_chain(trx: dict):
                 "describes": {"type": "Person", "id": address},
             },
         }
-        name = trx.get("Content", {}).get("name", "")
+        name = contentobj.get("name", "")
         if name:
             obj["object"]["name"] = name
 
-        image = trx.get("Content", {}).get("image")
+        image = contentobj.get("image")
         if image:
             obj["object"]["image"] = [
                 {
@@ -60,30 +62,29 @@ def from_old_chain(trx: dict):
             ]
 
     elif typeurl == "quorum.pb.Object":
-        content = trx.get("Content", {})
-        imgs = trx.get("Content", {}).get("image")
+        imgs = contentobj.get("image")
         if imgs:
             _temp_imgs = []
             for img in imgs:
                 if img.get("type") != "Image":
                     img["type"] = "Image"
                 _temp_imgs.append(img)
-            content["image"] = _temp_imgs
+            contentobj["image"] = _temp_imgs
 
-        content_type = content.get("type")
+        content_type = contentobj.get("type")
         if content_type in ["Like", "Dislike"]:
             obj = {
                 "type": content_type,
-                "object": {"type": "Note", "id": content.get("id")},
+                "object": {"type": "Note", "id": contentobj.get("id")},
             }
         else:
-            content["id"] = trx.get("TrxId")
-            if "inreplyto" in content:
-                content["inreplyto"] = {
+            contentobj["id"] = trx.get("TrxId")
+            if "inreplyto" in contentobj:
+                contentobj["inreplyto"] = {
                     "type": "Note",
-                    "id": content["inreplyto"]["trxid"],
+                    "id": contentobj["inreplyto"]["trxid"],
                 }
-            obj = {"type": "Create", "object": content}
+            obj = {"type": "Create", "object": contentobj}
 
     new = {"data": obj, "timestamp": trx.get("TimeStamp")}
     return new
