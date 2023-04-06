@@ -1,10 +1,40 @@
 """Data structure recommendations in Quorum. For webapp Feed, Port and RumApp"""
 
+import datetime
 import logging
+
+from dateutil import parser
 
 from quorum_data_py._utils import pack_icon, pack_imgs, pack_obj
 
 logger = logging.getLogger(__name__)
+
+
+def add_published(data: dict, published):
+    """
+    published: timestamp int or ISO format string
+    e.g. 2020-01-01T00:00:00Z, 2023-04-04T10:31:45+08:00
+    """
+    if isinstance(published, (float, int)):
+        published = int(str(published)[:10])
+        dt = datetime.datetime.fromtimestamp(published, datetime.timezone.utc)
+        published = dt.isoformat(timespec="seconds")
+    else:
+        try:
+            dt = parser.parse(published)
+            published = dt.isoformat(timespec="seconds")
+        except Exception as e:
+            raise ValueError(f"published format error: {published}") from e
+    data["published"] = published
+    return data
+
+
+def add_origin(data: dict, origin_name, origin_type=None):
+    origin_type = origin_type or "Application"
+    if origin_type not in ["Application", "Service"]:
+        logger.warning("origin_type should be 'Application' or 'Service'")
+    data["origin"] = {"type": origin_type, "name": origin_name}
+    return data
 
 
 def new_post(

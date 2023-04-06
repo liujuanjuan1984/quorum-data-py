@@ -25,11 +25,8 @@ def get_trx_type(trx: dict):
         trx_type = "counter"
     elif out_type == "Delete" and inner_type == "Note":
         trx_type = "delete"
-    elif (
-        out_type == "Follow"
-        or (out_type == "Undo" and inner_type == "Follow")
-        or out_type == "Block"
-        or (out_type == "Undo" and inner_type == "Block")
+    elif out_type in ["Follow", "Block"] or (
+        out_type == "Undo" and inner_type in ["Follow", "Block"]
     ):
         trx_type = "relation"
     elif out_type == "Announce" and data.get("name").find("private key") != -1:
