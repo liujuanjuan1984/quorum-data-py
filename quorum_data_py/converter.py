@@ -5,6 +5,8 @@
 """
 from quorum_mininode_py.crypto.account import public_key_to_address
 
+from quorum_data_py import feed
+
 
 def from_new_chain(trx: dict):
     """
@@ -15,9 +17,9 @@ def from_new_chain(trx: dict):
     """
     if isinstance(trx.get("Data"), str):
         raise ValueError("trx is encrypted.")
+    data = trx.get("Content") or trx.get("Data")
     new = {
-        "data": trx.get("Content") or trx.get("Data"),
-        "timestamp": trx["TimeStamp"],
+        "data": feed.add_published(data, int(trx["TimeStamp"])),
         "trx_id": trx["TrxId"],
     }
     return new
@@ -86,5 +88,7 @@ def from_old_chain(trx: dict):
                 }
             obj = {"type": "Create", "object": contentobj}
 
-    new = {"data": obj, "timestamp": trx.get("TimeStamp")}
+    new = {
+        "data": feed.add_published(obj, int(trx["TimeStamp"])),
+    }
     return new
