@@ -1,6 +1,7 @@
 import base64
 import datetime
 import io
+import json
 import logging
 import os
 import uuid
@@ -13,11 +14,9 @@ from pygifsicle import gifsicle
 logger = logging.getLogger(__name__)
 
 
-# 每条 trx 有大小限制，否则会导致链异常；此为链端限定
-IMAGE_MAX_SIZE_KB = 300  # kb, 每条trx中所包含的图片总大小限制
-# 单条 trx 最多4 张图片；此为 rum app 客户端限定：第三方 app 调整该限定
-IMAGE_MAX_NUM = 4
-CHUNK_SIZE = 200 * 1024  # b, 文件切割为多条trxs时，每条 trx 所包含的文件字节流上限
+TRX_SIZE_LIMIT = 300  # kb, 每条trx的总大小上限，超出会被限制出块
+IMAGE_NUM_LIMIT = 4  # 单条 trx 最多4 张图片；此为 rum app 限定：第三方 app 可调整该限定
+CHUNK_SIZE = 280 * 1024  # bytes, 文件切割为多条trxs时，每条 trx 所包含的文件字节流上限
 
 
 def _filename_init(img):
@@ -31,10 +30,9 @@ def _filename_init(img):
     return file_name
 
 
-def _zip_image_bytes(img_bytes, kb=IMAGE_MAX_SIZE_KB):
+def _zip_image_bytes(img_bytes, kb=TRX_SIZE_LIMIT):
     """zip image bytes and return bytes; default changed to .jpeg"""
 
-    kb = kb or IMAGE_MAX_SIZE_KB
     guess_extension = filetype.guess(img_bytes).extension
 
     with io.BytesIO(img_bytes) as im:
@@ -50,7 +48,7 @@ def _zip_image_bytes(img_bytes, kb=IMAGE_MAX_SIZE_KB):
             try:
                 out.save(im, "jpeg")
             except Exception as err:
-                logger.debug(err)
+                logger.info(err)
                 out.save(im, guess_extension)
             size = len(im.getvalue()) // 1024
         return im.getvalue()
@@ -78,7 +76,7 @@ def zip_file(file_path, to_zipfile=None, mode="w"):
     return to_zipfile
 
 
-def zip_gif(gif, kb=IMAGE_MAX_SIZE_KB, cover=False):
+def zip_gif(gif, kb=TRX_SIZE_LIMIT, cover=False):
     """压缩动图(gif)到指定大小(kb)以下
 
     gif: gif 格式动图本地路径
@@ -87,7 +85,6 @@ def zip_gif(gif, kb=IMAGE_MAX_SIZE_KB, cover=False):
 
     返回压缩后图片字节. 该方法需要安装 gifsicle 软件和 pygifsicle 模块
     """
-    kb = kb or IMAGE_MAX_SIZE_KB
     size = os.path.getsize(gif) / 1024
     if size < kb:
         return read_file_to_bytes(gif)
@@ -112,14 +109,13 @@ def zip_gif(gif, kb=IMAGE_MAX_SIZE_KB, cover=False):
     return read_file_to_bytes(gif)
 
 
-def _zip_image(img, kb=IMAGE_MAX_SIZE_KB):
+def _zip_image(img, kb=TRX_SIZE_LIMIT):
     file_bytes, is_file = _get_filebytes(img)
-
     try:
         if filetype.guess(file_bytes).extension == "gif" and is_file:
             img_bytes = zip_gif(img, kb=kb, cover=False)
         else:
-            img_bytes = _zip_image_bytes(file_bytes, kb=kb)
+            img_bytes = _zip_image_bytes(file_bytes, kb)
     except Exception as e:
         logger.warning("zip_image %s", e)
     return img_bytes
@@ -158,14 +154,29 @@ def _get_filebytes(img):
     return file_bytes, is_file
 
 
-def pack_imgs(images):
-    kb = int(IMAGE_MAX_SIZE_KB // min(len(images), IMAGE_MAX_NUM))
+def pack_imgs(images: list, kb: int = TRX_SIZE_LIMIT):
+    """
+    打包图片为 feed 所需的数据格式。
+    由于每个 trx 限定了 300kb 的大小，图片的大小需要根据已有 content 计算得出余量。
+    """
+    # check images size
+    if len(images) == 0:
+        raise ValueError("images is empty.")
+    # 从图片字节转换为 base64string 大小会膨胀 1.33 左右
+    bytes_limit = int(1024 * kb / 1.34)
+    sizes = [len(read_file_to_bytes(i)) for i in images]
+    total_size = sum(sizes)
+
+    if total_size < bytes_limit:
+        target_size = sizes
+    else:
+        target_size = [int(i * bytes_limit / total_size) for i in sizes]
+
     imgs = []
-    for img in images[:IMAGE_MAX_NUM]:
-        _bytes = _zip_image(img, kb)
+    for i, _img in enumerate(images):
+        _bytes = _zip_image(_img, target_size[i] // 1024)
         imgs.append(
             {
-                "name": _filename_init(img),
                 "mediaType": filetype.guess(_bytes).mime,
                 "content": base64.b64encode(_bytes).decode("utf-8"),
                 "type": "Image",
@@ -176,7 +187,7 @@ def pack_imgs(images):
 
 def pack_obj(content: str, images: list, name: str, post_id: str):
     content = content or ""
-    images = images or []
+    images = images[:IMAGE_NUM_LIMIT] or []
     if not (content or images):
         raise ValueError("content and images are empty")
     if not isinstance(images, list):
@@ -186,7 +197,8 @@ def pack_obj(content: str, images: list, name: str, post_id: str):
     if content:
         obj["content"] = content
     if images:
-        obj["image"] = pack_imgs(images)
+        kb = TRX_SIZE_LIMIT - int(len(json.dumps(obj)) // 1024) - 1
+        obj["image"] = pack_imgs(images, kb)
     if name:
         obj["name"] = name
     obj["id"] = post_id or str(uuid.uuid4())
