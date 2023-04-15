@@ -1,5 +1,4 @@
 import base64
-import datetime
 import io
 import json
 import logging
@@ -9,7 +8,6 @@ import zipfile
 
 import filetype
 from PIL import Image
-from pygifsicle import gifsicle
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +17,25 @@ IMAGE_NUM_LIMIT = 4  # 单条 trx 最多4 张图片；此为 rum app 限定：�
 CHUNK_SIZE = 280 * 1024  # bytes, 文件切割为多条trxs时，每条 trx 所包含的文件字节流上限
 
 
-def _filename_init(img):
-    file_bytes, is_file = _get_filebytes(img)
-    if is_file:
-        file_name = os.path.basename(img).encode().decode("utf-8")
-    else:
-        extension = filetype.guess(file_bytes).extension
-        name = f"{uuid.uuid4()}-{datetime.date.today()}"
-        file_name = ".".join([name, extension])
-    return file_name
+def read_file_to_bytes(file_path):
+    with open(file_path, "rb") as f:
+        bytes_data = f.read()
+    return bytes_data
 
 
-def _zip_image_bytes(img_bytes, kb=TRX_SIZE_LIMIT):
-    """zip image bytes and return bytes; default changed to .jpeg"""
+def zip_file(file_path, to_zipfile=None, mode="w"):
+    if not os.path.exists(file_path):
+        raise ValueError(f"{file_path} file is not exists.")
+    if not os.path.isfile(file_path):
+        raise ValueError(f"{file_path} is not a file.")
+    to_zipfile = to_zipfile or file_path + "_.zip"
+    with zipfile.ZipFile(to_zipfile, mode, zipfile.ZIP_DEFLATED) as zf:
+        zf.write(file_path, arcname=os.path.basename(file_path))
+    return to_zipfile
 
+
+def zip_image(img, kb=TRX_SIZE_LIMIT):
+    img_bytes = _get_filebytes(img)
     guess_extension = filetype.guess(img_bytes).extension
 
     with io.BytesIO(img_bytes) as im:
@@ -54,77 +57,9 @@ def _zip_image_bytes(img_bytes, kb=TRX_SIZE_LIMIT):
         return im.getvalue()
 
 
-def check_file(file_path):
-    if not os.path.exists(file_path):
-        raise ValueError(f"{file_path} file is not exists.")
-    if not os.path.isfile(file_path):
-        raise ValueError(f"{file_path} is not a file.")
-
-
-def read_file_to_bytes(file_path):
-    check_file(file_path)
-    with open(file_path, "rb") as f:
-        bytes_data = f.read()
-    return bytes_data
-
-
-def zip_file(file_path, to_zipfile=None, mode="w"):
-    check_file(file_path)
-    to_zipfile = to_zipfile or file_path + "_.zip"
-    with zipfile.ZipFile(to_zipfile, mode, zipfile.ZIP_DEFLATED) as zf:
-        zf.write(file_path, arcname=os.path.basename(file_path))
-    return to_zipfile
-
-
-def zip_gif(gif, kb=TRX_SIZE_LIMIT, cover=False):
-    """压缩动图(gif)到指定大小(kb)以下
-
-    gif: gif 格式动图本地路径
-    kb: 指定压缩大小, 默认 200kb
-    cover: 是否覆盖原图, 默认不覆盖
-
-    返回压缩后图片字节. 该方法需要安装 gifsicle 软件和 pygifsicle 模块
-    """
-    size = os.path.getsize(gif) / 1024
-    if size < kb:
-        return read_file_to_bytes(gif)
-
-    destination = None
-    if not cover:
-        destination = f"{os.path.splitext(gif)[0]}-zip.gif"
-
-    n = 0.9
-    while size >= kb:
-        gifsicle(
-            gif,
-            destination=destination,
-            optimize=True,
-            options=["--lossy=80", "--scale", str(n)],
-        )
-        if not cover:
-            gif = destination
-        size = os.path.getsize(gif) / 1024
-        n -= 0.05
-
-    return read_file_to_bytes(gif)
-
-
-def _zip_image(img, kb=TRX_SIZE_LIMIT):
-    file_bytes, is_file = _get_filebytes(img)
-    try:
-        if filetype.guess(file_bytes).extension == "gif" and is_file:
-            img_bytes = zip_gif(img, kb=kb, cover=False)
-        else:
-            img_bytes = _zip_image_bytes(file_bytes, kb)
-    except Exception as e:
-        logger.warning("zip_image %s", e)
-    return img_bytes
-
-
 def pack_icon(icon):
     """icon: one image as file path, or bytes, or bytes-string."""
-
-    img_bytes = _zip_image(icon)
+    img_bytes = zip_image(icon)
     icon = "".join(
         [
             "data:",
@@ -137,21 +72,18 @@ def pack_icon(icon):
 
 
 def _get_filebytes(img):
-    _size = len(img)
-    is_file = False
     if isinstance(img, str):
         if os.path.exists(img):
             file_bytes = read_file_to_bytes(img)
-            is_file = True
         else:
             file_bytes = base64.b64decode(img)
     elif isinstance(img, bytes):
         file_bytes = img
     else:
         raise TypeError(
-            f"not support for type: {type(img)} and length: {_size}"
+            f"not support for type: {type(img)} and length: {len(img)}"
         )
-    return file_bytes, is_file
+    return file_bytes
 
 
 def pack_imgs(images: list, kb: int = TRX_SIZE_LIMIT):
@@ -164,7 +96,7 @@ def pack_imgs(images: list, kb: int = TRX_SIZE_LIMIT):
         raise ValueError("images is empty.")
     # 从图片字节转换为 base64string 大小会膨胀 1.33 左右
     bytes_limit = int(1024 * kb / 1.34)
-    sizes = [len(read_file_to_bytes(i)) for i in images]
+    sizes = [len(_get_filebytes(i)) for i in images]
     total_size = sum(sizes)
 
     if total_size < bytes_limit:
@@ -174,7 +106,7 @@ def pack_imgs(images: list, kb: int = TRX_SIZE_LIMIT):
 
     imgs = []
     for i, _img in enumerate(images):
-        _bytes = _zip_image(_img, target_size[i] // 1024)
+        _bytes = zip_image(_img, target_size[i] // 1024)
         imgs.append(
             {
                 "mediaType": filetype.guess(_bytes).mime,
@@ -187,7 +119,8 @@ def pack_imgs(images: list, kb: int = TRX_SIZE_LIMIT):
 
 def pack_obj(content: str, images: list, name: str, post_id: str):
     content = content or ""
-    images = images[:IMAGE_NUM_LIMIT] or []
+    images = images or []
+    images = images[:IMAGE_NUM_LIMIT]
     if not (content or images):
         raise ValueError("content and images are empty")
     if not isinstance(images, list):

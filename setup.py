@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="quorum_data_py",
-    version="1.1.6",
+    version="1.1.9",
     author="liujuanjuan1984",
     author_email="qiaoanlu@163.com",
     description="Python Data for Apps of QuoRum",
@@ -31,7 +31,6 @@ setuptools.setup(
     python_requires=">=3.7",
     install_requires=[
         "pillow",
-        "pygifsicle",
         "filetype",
     ],
 )
