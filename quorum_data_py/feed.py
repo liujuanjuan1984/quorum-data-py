@@ -3,11 +3,25 @@
 import datetime
 import logging
 
-from dateutil import parser
-
 from quorum_data_py._utils import pack_icon, pack_imgs, pack_obj
 
 logger = logging.getLogger(__name__)
+
+
+def check_publiched(published):
+    if isinstance(published, (float, int)):
+        published = int(str(published)[:10])
+        dt = datetime.datetime.fromtimestamp(published, datetime.timezone.utc)
+        published = dt.isoformat(timespec="seconds")
+    else:
+        try:
+            dt = datetime.datetime.fromisoformat(
+                published.replace("Z", "+00:00")
+            )
+            published = dt.isoformat(timespec="seconds")
+        except Exception as e:
+            raise ValueError(f"published format error: {published}") from e
+    return published
 
 
 def add_published(data: dict, published):
@@ -15,17 +29,7 @@ def add_published(data: dict, published):
     published: timestamp int or ISO format string
     e.g. 2020-01-01T00:00:00Z, 2023-04-04T10:31:45+08:00
     """
-    if isinstance(published, (float, int)):
-        published = int(str(published)[:10])
-        dt = datetime.datetime.fromtimestamp(published, datetime.timezone.utc)
-        published = dt.isoformat(timespec="seconds")
-    else:
-        try:
-            dt = parser.parse(published)
-            published = dt.isoformat(timespec="seconds")
-        except Exception as e:
-            raise ValueError(f"published format error: {published}") from e
-    data["published"] = published
+    data["published"] = check_publiched(published)
     return data
 
 
