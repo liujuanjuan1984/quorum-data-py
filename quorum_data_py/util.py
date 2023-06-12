@@ -20,7 +20,10 @@ def check_publiched(published):
 def get_published_datetime(trx: dict):
     published = trx["Data"].get("published")
     if published:
-        dt = datetime.datetime.strptime(published, "%Y-%m-%dT%H:%M:%S.%fZ")
+        try:
+            dt = datetime.datetime.strptime(published, "%Y-%m-%dT%H:%M:%S%z")
+        except Exception:
+            dt = datetime.datetime.strptime(published, "%Y-%m-%dT%H:%M:%S.%fZ")
         utc_offset = dt.utcoffset()
         if utc_offset is not None:
             utc_dt = dt - utc_offset

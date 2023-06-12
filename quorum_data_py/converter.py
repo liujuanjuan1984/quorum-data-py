@@ -3,7 +3,8 @@
 
 把 解密后的 trx （通过 get content api 所获得的 trx）转换成新版的 trx data 和 timestamp 等，用来重新发布上链
 """
-from quorum_mininode_py.crypto.account import public_key_to_address
+
+from quorum_mininode_py import pubkey_to_address
 
 from quorum_data_py import feed
 
@@ -31,6 +32,7 @@ def from_old_chain(trx: dict):
     然后通过轻节点的 post to group api 发送上链
     适用场景：把旧链的 trxs 发送到新链
     """
+
     if isinstance(trx.get("Data"), str):
         raise ValueError("trx is encrypted.")
 
@@ -41,7 +43,7 @@ def from_old_chain(trx: dict):
 
     obj = None
     if typeurl == "quorum.pb.Person":
-        address = public_key_to_address(pubkey)
+        address = pubkey_to_address(pubkey)
         obj = {
             "type": "Create",
             "object": {

@@ -3,7 +3,7 @@ import logging
 from quorum_data_py import converter, feed, util
 from quorum_data_py.trx_type import get_trx_type
 
-__version__ = "1.2.5"
+__version__ = "1.2.7"
 __author__ = "liujuanjuan1984"
 
 # Set default logging handler to avoid "No handler found" warnings.
