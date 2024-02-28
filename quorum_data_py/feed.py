@@ -1,11 +1,17 @@
 """Data structure recommendations in Quorum. For webapp Feed, Port and RumApp"""
 
+import base64
+import json
 import logging
+import uuid
+
+import filetype
 
 from quorum_data_py import util
-from quorum_data_py._utils import pack_icon, pack_imgs, pack_obj
 
 logger = logging.getLogger(__name__)
+
+IMAGE_NUM_LIMIT = 4  # 单条 trx 最多4 张图片；此为 rum app 限定：第三方 app 可调整该限定
 
 
 def add_published(data: dict, published):
@@ -169,7 +175,7 @@ def group_icon(icon: str):
     return {
         "name": "group_icon",
         "_type": "string",
-        "value": pack_icon(icon),
+        "value": util.pack_icon(icon),
         "action": "add",
         "memo": "init group icon",
     }
@@ -209,3 +215,55 @@ def group_default_permission(default_permission: str):
         "action": "add",
         "memo": "init group default permission",
     }
+
+
+def pack_obj(content: str, images: list, name: str, post_id: str):
+    content = content or ""
+    images = images or []
+    images = images[:IMAGE_NUM_LIMIT]
+    if not (content or images):
+        raise ValueError("content and images are empty")
+    if not isinstance(images, list):
+        raise TypeError("images must be list")
+
+    obj = {"type": "Note"}
+    if content:
+        obj["content"] = content
+    if images:
+        kb = util.TRX_SIZE_LIMIT - int(len(json.dumps(obj)) // 1024) - 1
+        obj["image"] = pack_imgs(images, kb)
+    if name:
+        obj["name"] = name
+    obj["id"] = post_id or str(uuid.uuid4())
+    return obj
+
+
+def pack_imgs(images: list, kb: int = util.TRX_SIZE_LIMIT):
+    """
+    打包图片为 feed 所需的数据格式。
+    由于每个 trx 限定了 300kb 的大小，图片的大小需要根据已有 content 计算得出余量。
+    """
+    # check images size
+    if len(images) == 0:
+        raise ValueError("images is empty.")
+    # 从图片字节转换为 base64string 大小会膨胀 1.33 左右
+    bytes_limit = int(1024 * kb / 1.34)
+    sizes = [len(util.get_filebytes(i)) for i in images]
+    total_size = sum(sizes)
+
+    if total_size < bytes_limit:
+        target_size = sizes
+    else:
+        target_size = [int(i * bytes_limit / total_size) for i in sizes]
+
+    imgs = []
+    for i, _img in enumerate(images):
+        _bytes = util.zip_image(_img, target_size[i] // 1024)
+        imgs.append(
+            {
+                "mediaType": filetype.guess(_bytes).mime,
+                "content": base64.b64encode(_bytes).decode("utf-8"),
+                "type": "Image",
+            }
+        )
+    return imgs
