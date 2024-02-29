@@ -126,8 +126,12 @@ def filename_init(path_bytes_string):
 def init_fileinfo(path_bytes_string, memo: str = None):
     file_bytes = get_filebytes(path_bytes_string)
     file_name = filename_init(path_bytes_string)
+    try:
+        mediaType = filetype.guess(file_bytes).mime
+    except:
+        mediaType = "text/plain"
     fileinfo = {
-        "mediaType": filetype.guess(file_bytes).mime,
+        "mediaType": mediaType,
         "name": file_name,
         "memo": memo or "",
         "title": os.path.splitext(file_name)[0],
